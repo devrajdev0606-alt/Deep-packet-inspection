@@ -28,8 +28,8 @@ class SNIExtractor:
     """Extract SNI from TLS ClientHello"""
     
     @staticmethod
-    def is_tls_client_hello(payload: bytes) -> bool:
-        """Check if payload contains TLS ClientHello"""
+    def is_tls_handshake(payload: bytes) -> bool:
+        """Check if payload contains TLS handshake"""
         if len(payload) < 6:
             return False
         
@@ -45,15 +45,26 @@ class SNIExtractor:
         if tls_version < 0x0301 or tls_version > 0x0304:
             return False
         
+        return True
+    
+    @staticmethod
+    def is_tls_client_hello(payload: bytes) -> bool:
+        """Check if payload contains TLS ClientHello"""
+        if not SNIExtractor.is_tls_handshake(payload):
+            return False
+        
+        if len(payload) <= 5:
+            return False
+        
         # Handshake type should be ClientHello (1)
-        if len(payload) > 5 and payload[5] == TLSHandshakeType.CLIENT_HELLO.value:
+        if payload[5] == TLSHandshakeType.CLIENT_HELLO.value:
             return True
         
         return False
     
     @staticmethod
     def extract_sni(payload: bytes) -> Optional[str]:
-        """Extract SNI from TLS ClientHello"""
+        """Extract SNI from TLS ClientHello with improved robustness"""
         if not SNIExtractor.is_tls_client_hello(payload):
             return None
         
@@ -76,6 +87,8 @@ class SNIExtractor:
                 return None
             
             session_id_len = payload[offset]
+            if session_id_len > 32:  # Session ID should be <= 32 bytes
+                return None
             offset += 1 + session_id_len
             
             # Skip Cipher Suites
@@ -99,31 +112,34 @@ class SNIExtractor:
             extensions_len = (payload[offset] << 8) | payload[offset + 1]
             offset += 2
             
-            # Parse extensions
-            extensions_end = offset + extensions_len
+            # Parse extensions with bounds checking
+            extensions_end = min(offset + extensions_len, len(payload))
             while offset + 4 <= extensions_end:
                 ext_type = (payload[offset] << 8) | payload[offset + 1]
                 ext_len = (payload[offset + 2] << 8) | payload[offset + 3]
                 offset += 4
                 
+                # Validate extension length
+                if offset + ext_len > len(payload):
+                    break
+                
                 # Extension type 0 = server_name
                 if ext_type == 0:
-                    if offset + ext_len > len(payload):
-                        return None
-                    
                     ext_data = payload[offset:offset + ext_len]
                     
                     # Parse server_name extension
                     if len(ext_data) < 5:
-                        return None
+                        break
                     
                     # Skip server_name_list_len (2 bytes)
                     sni_offset = 2
                     
                     if sni_offset + 3 > len(ext_data):
-                        return None
+                        break
                     
                     # Skip name_type (1 byte) - should be 0 (host_name)
+                    if ext_data[sni_offset] != 0:
+                        break
                     sni_offset += 1
                     
                     # Get name_len
@@ -131,10 +147,12 @@ class SNIExtractor:
                     sni_offset += 2
                     
                     if sni_offset + name_len > len(ext_data):
-                        return None
+                        break
                     
-                    sni = ext_data[sni_offset:sni_offset + name_len].decode('ascii', errors='ignore')
-                    return sni
+                    if name_len > 0 and name_len < 256:  # Reasonable domain name length
+                        sni = ext_data[sni_offset:sni_offset + name_len].decode('ascii', errors='ignore')
+                        if sni and len(sni) > 0:
+                            return sni
                 
                 offset += ext_len
             
@@ -288,9 +306,14 @@ class ApplicationExtractor:
                 info['protocol'] = 'DNS'
                 return info
         
-        # Check for TLS/HTTPS
-        if SNIExtractor.is_tls_client_hello(payload):
-            info['sni'] = SNIExtractor.extract_sni(payload)
+        # Check for TLS/HTTPS - Try to extract SNI
+        if SNIExtractor.is_tls_handshake(payload):
+            sni = SNIExtractor.extract_sni(payload)
+            if sni:
+                info['sni'] = sni
+                info['protocol'] = 'TLS/HTTPS'
+                return info
+            # Even if SNI extraction fails, it's still TLS
             info['protocol'] = 'TLS/HTTPS'
             return info
         
