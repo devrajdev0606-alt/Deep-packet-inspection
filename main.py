@@ -76,7 +76,8 @@ class SimpleDPIEngine:
             # Classify application
             sni = app_info.get('sni', '')
             http_host = app_info.get('http_host', '')
-            app_type = AppTypeClassifier.classify(sni, http_host)
+            dns_query = app_info.get('dns_query', '')
+            app_type = AppTypeClassifier.classify(sni, http_host, dns_query, parsed.src_port, parsed.dest_port)
             
             if app_type.value != 0:  # Not UNKNOWN
                 self.stats['classified_packets'] += 1
@@ -98,7 +99,7 @@ class SimpleDPIEngine:
                 parsed.src_ip, 
                 parsed.dest_ip, 
                 app_type, 
-                sni or http_host
+                sni or http_host or dns_query
             )
             
             if is_blocked:
@@ -115,6 +116,7 @@ class SimpleDPIEngine:
                 'app_type': app_type.name,
                 'sni': sni,
                 'http_host': http_host,
+                'dns_query': dns_query,
                 'payload_len': parsed.payload_length,
                 'blocked': is_blocked
             })
@@ -134,18 +136,18 @@ class SimpleDPIEngine:
         else:
             # Print first 20 packets
             print("\n[Packets Analyzed] (first 20 shown):")
-            print("-" * 120)
-            print(f"{'#':<5} {'Time':<12} {'Src IP':<15} {'Dst IP':<15} {'Src Port':<6} {'Dst Port':<6} {'App':<15} {'SNI/Host':<20} {'Blocked':<8}")
-            print("-" * 120)
+            print("-" * 140)
+            print(f"{'#':<5} {'Time':<12} {'Src IP':<15} {'Dst IP':<15} {'Src Port':<6} {'Dst Port':<6} {'App':<15} {'Domain/DNS':<30} {'Blocked':<8}")
+            print("-" * 140)
             
             for pkt in output_packets[:20]:
                 timestamp = datetime.fromtimestamp(pkt['timestamp']).strftime('%H:%M:%S')
-                sni_host = pkt['sni'] or pkt['http_host'] or '-'
+                domain_info = pkt['sni'] or pkt['http_host'] or pkt['dns_query'] or '-'
                 blocked_str = "YES" if pkt['blocked'] else "NO"
                 
                 print(f"{pkt['packet_num']:<5} {timestamp:<12} {pkt['src_ip']:<15} {pkt['dst_ip']:<15} "
                       f"{pkt['src_port']:<6} {pkt['dest_port']:<6} {pkt['app_type']:<15} "
-                      f"{sni_host:<20} {blocked_str:<8}")
+                      f"{domain_info:<30} {blocked_str:<8}")
     
     def print_summary(self) -> None:
         """Print statistics summary"""
@@ -179,12 +181,12 @@ class SimpleDPIEngine:
         # Top domains
         domains = {}
         for conn in connections:
-            domain = conn.sni or conn.http_host
+            domain = conn.sni or conn.http_host or conn.dns_query
             if domain:
                 domains[domain] = domains.get(domain, 0) + 1
         
         if domains:
-            print(f"\n[Top Domains]")
+            print(f"\n[Top Domains/DNS Queries]")
             for domain, count in sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10]:
                 print(f"  {domain}: {count} connections")
     
@@ -193,19 +195,19 @@ class SimpleDPIEngine:
         try:
             with open(output_file, 'w') as f:
                 f.write("Packet Analysis Results\n")
-                f.write("=" * 150 + "\n")
+                f.write("=" * 180 + "\n")
                 f.write(f"{'#':<5} {'Time':<12} {'Src IP':<15} {'Dst IP':<15} {'Src Port':<6} "
-                       f"{'Dst Port':<6} {'Protocol':<6} {'App':<15} {'SNI/Host':<25} {'Payload':<8} {'Blocked':<8}\n")
-                f.write("=" * 150 + "\n")
+                       f"{'Dst Port':<6} {'Protocol':<6} {'App':<15} {'SNI/Host/DNS':<35} {'Payload':<8} {'Blocked':<8}\n")
+                f.write("=" * 180 + "\n")
                 
                 for pkt in packets:
                     timestamp = datetime.fromtimestamp(pkt['timestamp']).strftime('%H:%M:%S')
-                    sni_host = pkt['sni'] or pkt['http_host'] or '-'
+                    domain_info = pkt['sni'] or pkt['http_host'] or pkt['dns_query'] or '-'
                     blocked_str = "YES" if pkt['blocked'] else "NO"
                     
                     f.write(f"{pkt['packet_num']:<5} {timestamp:<12} {pkt['src_ip']:<15} {pkt['dst_ip']:<15} "
                            f"{pkt['src_port']:<6} {pkt['dest_port']:<6} {pkt['protocol']:<6} {pkt['app_type']:<15} "
-                           f"{sni_host:<25} {pkt['payload_len']:<8} {blocked_str:<8}\n")
+                           f"{domain_info:<35} {pkt['payload_len']:<8} {blocked_str:<8}\n")
             
             print(f"\n[Results saved to {output_file}]")
         

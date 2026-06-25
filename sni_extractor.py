@@ -212,9 +212,27 @@ class DNSExtractor:
         return True
     
     @staticmethod
+    def is_dns_response(payload: bytes) -> bool:
+        """Check if payload is DNS response"""
+        if len(payload) < 12:
+            return False
+        
+        # Check QR bit (byte 2, bit 7) - should be 1 for response
+        flags = payload[2]
+        if not (flags & 0x80):
+            return False  # This is a query
+        
+        # Check ANCOUNT (bytes 6-7) - should be > 0 for valid response
+        ancount = (payload[6] << 8) | payload[7]
+        if ancount == 0:
+            return False
+        
+        return True
+    
+    @staticmethod
     def extract_query(payload: bytes) -> Optional[str]:
         """Extract DNS query domain"""
-        if not DNSExtractor.is_dns_query(payload):
+        if not DNSExtractor.is_dns_query(payload) and not DNSExtractor.is_dns_response(payload):
             return None
         
         try:
@@ -263,20 +281,23 @@ class ApplicationExtractor:
         if not payload:
             return info
         
+        # Check for DNS (port 53)
+        if dst_port == 53 or src_port == 53:
+            if DNSExtractor.is_dns_query(payload) or DNSExtractor.is_dns_response(payload):
+                info['dns_query'] = DNSExtractor.extract_query(payload)
+                info['protocol'] = 'DNS'
+                return info
+        
         # Check for TLS/HTTPS
         if SNIExtractor.is_tls_client_hello(payload):
             info['sni'] = SNIExtractor.extract_sni(payload)
             info['protocol'] = 'TLS/HTTPS'
+            return info
         
         # Check for HTTP
-        elif HTTPExtractor.is_http_request(payload):
+        if HTTPExtractor.is_http_request(payload):
             info['http_host'] = HTTPExtractor.extract_host(payload)
             info['protocol'] = 'HTTP'
-        
-        # Check for DNS
-        elif dst_port == 53 or src_port == 53:
-            if DNSExtractor.is_dns_query(payload):
-                info['dns_query'] = DNSExtractor.extract_query(payload)
-                info['protocol'] = 'DNS'
+            return info
         
         return info

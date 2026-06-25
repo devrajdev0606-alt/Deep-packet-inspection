@@ -27,6 +27,7 @@ class AppType(Enum):
     DISCORD = auto()
     TWITCH = auto()
     REDDIT = auto()
+    DNS = auto()
 
 
 class ConnectionState(Enum):
@@ -76,14 +77,43 @@ class Connection:
 
 
 class AppTypeClassifier:
-    """Classify applications based on SNI/Host"""
+    """Classify applications based on SNI/Host/DNS"""
     
     @staticmethod
-    def classify(sni: str = "", host: str = "") -> AppType:
-        """Classify application type based on SNI or HTTP Host"""
-        # Use SNI if available, otherwise use HTTP Host
-        domain = (sni or host).lower()
+    def classify(sni: str = "", host: str = "", dns_query: str = "", 
+                 src_port: int = 0, dst_port: int = 0) -> AppType:
+        """Classify application type based on SNI, HTTP Host, or DNS query"""
         
+        # First check DNS queries
+        if dns_query:
+            domain = dns_query.lower()
+            result = AppTypeClassifier._classify_domain(domain)
+            if result != AppType.UNKNOWN:
+                return result
+        
+        # Then check SNI
+        if sni:
+            domain = sni.lower()
+            result = AppTypeClassifier._classify_domain(domain)
+            if result != AppType.UNKNOWN:
+                return result
+        
+        # Then check HTTP Host
+        if host:
+            domain = host.lower()
+            result = AppTypeClassifier._classify_domain(domain)
+            if result != AppType.UNKNOWN:
+                return result
+        
+        # Check by port if no domain info
+        if dst_port == 53 or src_port == 53:
+            return AppType.DNS
+        
+        return AppType.UNKNOWN
+    
+    @staticmethod
+    def _classify_domain(domain: str) -> AppType:
+        """Classify based on domain name"""
         if not domain:
             return AppType.UNKNOWN
         
