@@ -16,9 +16,10 @@ from rule_manager import RuleManager
 class SimpleDPIEngine:
     """Simple DPI Engine for packet analysis"""
     
-    def __init__(self):
+    def __init__(self, debug=False):
         self.tracker = ConnectionTracker()
         self.rule_manager = RuleManager()
+        self.debug = debug
         self.stats = {
             'total_packets': 0,
             'total_bytes': 0,
@@ -37,6 +38,8 @@ class SimpleDPIEngine:
             return
         
         print(f"\n[DPI Engine] Starting packet analysis...")
+        if self.debug:
+            print(f"[Debug Mode] ON - Showing classification details\n")
         packet_count = 0
         
         output_packets = []
@@ -77,7 +80,22 @@ class SimpleDPIEngine:
             sni = app_info.get('sni', '')
             http_host = app_info.get('http_host', '')
             dns_query = app_info.get('dns_query', '')
-            app_type = AppTypeClassifier.classify(sni, http_host, dns_query, parsed.src_port, parsed.dest_port)
+            
+            if self.debug and packet_count < 10:  # Show debug for first 10 packets
+                print(f"[Packet {packet_count}] {parsed.src_ip}:{parsed.src_port} -> {parsed.dest_ip}:{parsed.dest_port}")
+                print(f"  Protocol: {parsed.protocol}, Payload: {parsed.payload_length} bytes")
+                if sni:
+                    print(f"  SNI: {sni}")
+                if http_host:
+                    print(f"  HTTP Host: {http_host}")
+                if dns_query:
+                    print(f"  DNS Query: {dns_query}")
+            
+            app_type = AppTypeClassifier.classify(
+                sni, http_host, dns_query, 
+                parsed.src_port, parsed.dest_port,
+                debug=self.debug and packet_count < 10
+            )
             
             if app_type.value != 0:  # Not UNKNOWN
                 self.stats['classified_packets'] += 1
@@ -125,7 +143,7 @@ class SimpleDPIEngine:
         
         reader.close()
         
-        print(f"[DPI Engine] Processed {packet_count} packets\n")
+        print(f"\n[DPI Engine] Processed {packet_count} packets\n")
         
         # Print summary
         self.print_summary()
@@ -218,14 +236,23 @@ class SimpleDPIEngine:
 def main():
     """Main entry point"""
     if len(sys.argv) < 2:
-        print("Usage: python main.py <pcap_file> [output_file]")
+        print("Usage: python main.py <pcap_file> [output_file] [--debug]")
         print("Example: python main.py test_dpi.pcap output.txt")
+        print("Example: python main.py test_dpi.pcap --debug (shows classification details)")
         sys.exit(1)
     
     pcap_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else None
+    output_file = None
+    debug = False
     
-    engine = SimpleDPIEngine()
+    # Parse remaining arguments
+    for arg in sys.argv[2:]:
+        if arg == '--debug':
+            debug = True
+        else:
+            output_file = arg
+    
+    engine = SimpleDPIEngine(debug=debug)
     engine.process_pcap(pcap_file, output_file)
 
 

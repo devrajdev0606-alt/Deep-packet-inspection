@@ -10,6 +10,9 @@ from typing import Dict
 class AppType(Enum):
     """Application types for classification"""
     UNKNOWN = 0
+    HTTP = auto()
+    HTTPS = auto()
+    DNS = auto()
     GOOGLE = auto()
     YOUTUBE = auto()
     FACEBOOK = auto()
@@ -27,7 +30,6 @@ class AppType(Enum):
     DISCORD = auto()
     TWITCH = auto()
     REDDIT = auto()
-    DNS = auto()
 
 
 class ConnectionState(Enum):
@@ -77,38 +79,58 @@ class Connection:
 
 
 class AppTypeClassifier:
-    """Classify applications based on SNI/Host/DNS"""
+    """Classify applications based on SNI/Host/DNS/Port"""
     
     @staticmethod
     def classify(sni: str = "", host: str = "", dns_query: str = "", 
-                 src_port: int = 0, dst_port: int = 0) -> AppType:
-        """Classify application type based on SNI, HTTP Host, or DNS query"""
+                 src_port: int = 0, dst_port: int = 0, debug: bool = False) -> AppType:
+        """Classify application type based on multiple signals"""
         
-        # First check DNS queries
-        if dns_query:
-            domain = dns_query.lower()
-            result = AppTypeClassifier._classify_domain(domain)
-            if result != AppType.UNKNOWN:
-                return result
-        
-        # Then check SNI
-        if sni:
-            domain = sni.lower()
-            result = AppTypeClassifier._classify_domain(domain)
-            if result != AppType.UNKNOWN:
-                return result
-        
-        # Then check HTTP Host
-        if host:
-            domain = host.lower()
-            result = AppTypeClassifier._classify_domain(domain)
-            if result != AppType.UNKNOWN:
-                return result
-        
-        # Check by port if no domain info
+        # Priority 1: DNS queries (port 53)
         if dst_port == 53 or src_port == 53:
+            if dns_query:
+                result = AppTypeClassifier._classify_domain(dns_query)
+                if result != AppType.UNKNOWN:
+                    if debug:
+                        print(f"  [DNS] Classified as {result.name} from query: {dns_query}")
+                    return result
+            if debug:
+                print(f"  [DNS] No query, classified as DNS (port 53)")
             return AppType.DNS
         
+        # Priority 2: SNI from TLS ClientHello
+        if sni:
+            result = AppTypeClassifier._classify_domain(sni)
+            if result != AppType.UNKNOWN:
+                if debug:
+                    print(f"  [TLS SNI] Classified as {result.name} from: {sni}")
+                return result
+            if debug:
+                print(f"  [TLS SNI] Could not classify domain: {sni}")
+        
+        # Priority 3: HTTP Host header
+        if host:
+            result = AppTypeClassifier._classify_domain(host)
+            if result != AppType.UNKNOWN:
+                if debug:
+                    print(f"  [HTTP Host] Classified as {result.name} from: {host}")
+                return result
+            if debug:
+                print(f"  [HTTP Host] Could not classify domain: {host}")
+        
+        # Priority 4: Port-based classification (fallback)
+        if dst_port == 443 or src_port == 443:
+            if debug:
+                print(f"  [Port 443] Classified as HTTPS (no SNI found)")
+            return AppType.HTTPS
+        
+        if dst_port == 80 or src_port == 80:
+            if debug:
+                print(f"  [Port 80] Classified as HTTP")
+            return AppType.HTTP
+        
+        if debug:
+            print(f"  [Unknown] No classification signals (ports: {src_port}/{dst_port})")
         return AppType.UNKNOWN
     
     @staticmethod
@@ -117,72 +139,74 @@ class AppTypeClassifier:
         if not domain:
             return AppType.UNKNOWN
         
+        domain_lower = domain.lower()
+        
         # Google (including YouTube, which is owned by Google)
-        if any(keyword in domain for keyword in ['google', 'gstatic', 'googleapis', 'ggpht', 'gvt1']):
+        if any(keyword in domain_lower for keyword in ['google', 'gstatic', 'googleapis', 'ggpht', 'gvt1']):
             return AppType.GOOGLE
         
         # YouTube
-        if any(keyword in domain for keyword in ['youtube', 'ytimg', 'youtu.be', 'yt3.ggpht']):
+        if any(keyword in domain_lower for keyword in ['youtube', 'ytimg', 'youtu.be', 'yt3.ggpht']):
             return AppType.YOUTUBE
         
         # Facebook/Meta
-        if any(keyword in domain for keyword in ['facebook', 'fbcdn', 'fb.com', 'fbsbx', 'meta.com']):
+        if any(keyword in domain_lower for keyword in ['facebook', 'fbcdn', 'fb.com', 'fbsbx', 'meta.com']):
             return AppType.FACEBOOK
         
         # Instagram
-        if any(keyword in domain for keyword in ['instagram', 'cdninstagram']):
+        if any(keyword in domain_lower for keyword in ['instagram', 'cdninstagram']):
             return AppType.INSTAGRAM
         
         # WhatsApp
-        if any(keyword in domain for keyword in ['whatsapp', 'wa.me']):
+        if any(keyword in domain_lower for keyword in ['whatsapp', 'wa.me']):
             return AppType.WHATSAPP
         
         # Twitter/X
-        if any(keyword in domain for keyword in ['twitter', 'twimg', 'x.com', 't.co']):
+        if any(keyword in domain_lower for keyword in ['twitter', 'twimg', 'x.com', 't.co']):
             return AppType.TWITTER
         
         # Netflix
-        if any(keyword in domain for keyword in ['netflix', 'nflxvideo', 'nflximg']):
+        if any(keyword in domain_lower for keyword in ['netflix', 'nflxvideo', 'nflximg']):
             return AppType.NETFLIX
         
         # Amazon
-        if any(keyword in domain for keyword in ['amazon', 'amazonaws', 'cloudfront', 'aws']):
+        if any(keyword in domain_lower for keyword in ['amazon', 'amazonaws', 'cloudfront', 'aws']):
             return AppType.AMAZON
         
         # Microsoft
-        if any(keyword in domain for keyword in ['microsoft', 'msn.com', 'office', 'azure', 'live.com', 'outlook', 'bing']):
+        if any(keyword in domain_lower for keyword in ['microsoft', 'msn.com', 'office', 'azure', 'live.com', 'outlook', 'bing']):
             return AppType.MICROSOFT
         
         # Apple
-        if any(keyword in domain for keyword in ['apple', 'icloud', 'itunes', 'appstore']):
+        if any(keyword in domain_lower for keyword in ['apple', 'icloud', 'itunes', 'appstore']):
             return AppType.APPLE
         
         # GitHub
-        if any(keyword in domain for keyword in ['github', 'githubusercontent']):
+        if any(keyword in domain_lower for keyword in ['github', 'githubusercontent']):
             return AppType.GITHUB
         
         # Cloudflare
-        if any(keyword in domain for keyword in ['cloudflare', 'cf']):
+        if any(keyword in domain_lower for keyword in ['cloudflare', 'cf']):
             return AppType.CLOUDFLARE
         
         # Gmail
-        if any(keyword in domain for keyword in ['gmail']):
+        if any(keyword in domain_lower for keyword in ['gmail']):
             return AppType.GMAIL
         
         # Slack
-        if any(keyword in domain for keyword in ['slack']):
+        if any(keyword in domain_lower for keyword in ['slack']):
             return AppType.SLACK
         
         # Discord
-        if any(keyword in domain for keyword in ['discord']):
+        if any(keyword in domain_lower for keyword in ['discord']):
             return AppType.DISCORD
         
         # Twitch
-        if any(keyword in domain for keyword in ['twitch']):
+        if any(keyword in domain_lower for keyword in ['twitch']):
             return AppType.TWITCH
         
         # Reddit
-        if any(keyword in domain for keyword in ['reddit']):
+        if any(keyword in domain_lower for keyword in ['reddit']):
             return AppType.REDDIT
         
         return AppType.UNKNOWN
