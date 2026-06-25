@@ -43,6 +43,7 @@ class ParsedPacket:
     dest_ip: str = ""
     protocol: int = 0
     ttl: int = 0
+    ip_header_len: int = 0
     
     # TCP layer
     has_tcp: bool = False
@@ -51,6 +52,7 @@ class ParsedPacket:
     seq_number: int = 0
     ack_number: int = 0
     tcp_flags: int = 0
+    tcp_header_len: int = 0
     
     # UDP layer
     has_udp: bool = False
@@ -93,13 +95,20 @@ class PacketParser:
             if not PacketParser._parse_ipv4(raw_data, parsed, offset):
                 return None
             
+            # Move offset to transport layer (IP header + IP base offset)
+            offset += parsed.ip_header_len
+            
             # Parse transport layer based on protocol
             if parsed.protocol == Protocol.TCP.value:
                 if not PacketParser._parse_tcp(raw_data, parsed, offset):
                     return None
+                # Move offset to payload (TCP header)
+                offset += parsed.tcp_header_len
             elif parsed.protocol == Protocol.UDP.value:
                 if not PacketParser._parse_udp(raw_data, parsed, offset):
                     return None
+                # Move offset to payload (8 bytes UDP header)
+                offset += 8
         
         # Set payload information
         if offset < len(raw_data):
@@ -147,6 +156,7 @@ class PacketParser:
         
         parsed.has_ip = True
         parsed.ip_version = ip_version
+        parsed.ip_header_len = ip_header_len
         
         # TTL (byte 8)
         parsed.ttl = ip_data[8]
@@ -161,9 +171,6 @@ class PacketParser:
         # Destination IP (bytes 16-19)
         dest_ip_int = struct.unpack('!I', ip_data[16:20])[0]
         parsed.dest_ip = PacketParser.ip_to_string(dest_ip_int)
-        
-        # Update offset to transport layer
-        offset_adj = ip_header_len
         
         return True
     
@@ -189,7 +196,11 @@ class PacketParser:
         
         # Data offset and flags (bytes 12-13)
         data_offset_flags = struct.unpack('!H', tcp_data[12:14])[0]
+        data_offset = (data_offset_flags >> 12) & 0x0F
         parsed.tcp_flags = data_offset_flags & 0xFF
+        
+        # Calculate TCP header length
+        parsed.tcp_header_len = data_offset * 4
         
         parsed.has_tcp = True
         
