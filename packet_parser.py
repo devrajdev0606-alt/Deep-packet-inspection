@@ -7,6 +7,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import Optional
 from enum import Enum
+import socket
 
 
 class EtherType(Enum):
@@ -73,7 +74,7 @@ class PacketParser:
     @staticmethod
     def ip_to_string(ip_int: int) -> str:
         """Convert 4-byte IP to dotted notation"""
-        return f"{(ip_int >> 0) & 0xFF}.{(ip_int >> 8) & 0xFF}.{(ip_int >> 16) & 0xFF}.{(ip_int >> 24) & 0xFF}"
+        return socket.inet_ntoa(struct.pack("!I", ip_int))
     
     @staticmethod
     def parse(raw_data: bytes, raw_header=None) -> Optional[ParsedPacket]:
