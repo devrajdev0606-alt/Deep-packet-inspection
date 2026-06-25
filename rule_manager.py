@@ -5,7 +5,7 @@ Thread-safe management of blocking rules for IPs, domains, and applications
 
 import threading
 from typing import Set, List
-from types import AppType
+from packet_types import AppType
 
 
 class RuleManager:

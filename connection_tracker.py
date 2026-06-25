@@ -7,7 +7,7 @@ import threading
 import time
 from typing import Dict, List, Optional
 from dataclasses import dataclass
-from types import Connection, FiveTuple, ConnectionState, AppType
+from packet_types import Connection, FiveTuple, ConnectionState, AppType
 
 
 @dataclass

@@ -8,7 +8,7 @@ from datetime import datetime
 from packet_reader import PcapReader
 from packet_parser import PacketParser
 from sni_extractor import ApplicationExtractor
-from types import AppTypeClassifier, parse_ip_string, FiveTuple
+from packet_types import AppTypeClassifier, parse_ip_string, FiveTuple
 from connection_tracker import ConnectionTracker
 from rule_manager import RuleManager
 
