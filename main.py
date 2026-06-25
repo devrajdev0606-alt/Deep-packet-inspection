@@ -53,7 +53,9 @@ class SimpleDPIEngine:
             parsed = PacketParser.parse(raw_packet.data)
             if not parsed:
                 continue
-            
+            parsed.timestamp_sec = raw_packet.header.ts_sec
+            parsed.timestamp_usec = raw_packet.header.ts_usec
+
             # Update stats
             self.stats['total_packets'] += 1
             self.stats['total_bytes'] += len(raw_packet.data)
