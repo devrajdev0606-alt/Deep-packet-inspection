@@ -49,6 +49,15 @@ class FiveTuple:
     dst_port: int = 0
     protocol: int = 0
     
+    def normalized(self):
+        a = (self.src_ip, self.src_port)
+        b = (self.dst_ip, self.dst_port)
+
+        if a <= b:
+            return (a, b, self.protocol)
+
+        return (b, a, self.protocol)
+    
     def __hash__(self):
         return hash((self.src_ip, self.dst_ip, self.src_port, self.dst_port, self.protocol))
     

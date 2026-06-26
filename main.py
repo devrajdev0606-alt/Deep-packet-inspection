@@ -112,14 +112,27 @@ class SimpleDPIEngine:
             )
             
             # Track connection
-            self.tracker.track_packet(tuple_obj, app_type, sni, http_host, len(raw_packet.data))
+            conn = self.tracker.track_packet(
+                tuple_obj,
+                app_type,
+                sni,
+                http_host,
+                len(raw_packet.data)
+            )
+            domain = sni or http_host or dns_query
+
+            if not domain:
+                domain = conn.sni or conn.http_host or "-"
             
             # Check if should block
+            domain = sni or http_host or dns_query
+            if not domain:
+                domain = conn.sni or conn.http_host or "-"
             is_blocked = self.rule_manager.is_packet_blocked(
                 parsed.src_ip, 
                 parsed.dest_ip, 
                 app_type, 
-                sni or http_host or dns_query
+                domain
             )
             
             if is_blocked:
@@ -134,9 +147,7 @@ class SimpleDPIEngine:
                 'dest_port': parsed.dest_port,
                 'protocol': PacketParser.protocol_to_string(parsed.protocol),
                 'app_type': app_type.name,
-                'sni': sni,
-                'http_host': http_host,
-                'dns_query': dns_query,
+                'domain': domain,
                 'payload_len': parsed.payload_length,
                 'blocked': is_blocked
             })
@@ -162,7 +173,7 @@ class SimpleDPIEngine:
             
             for pkt in output_packets[:20]:
                 timestamp = datetime.fromtimestamp(pkt['timestamp']).strftime('%H:%M:%S')
-                domain_info = pkt['sni'] or pkt['http_host'] or pkt['dns_query'] or '-'
+                domain_info = pkt['domain']
                 blocked_str = "YES" if pkt['blocked'] else "NO"
                 
                 print(f"{pkt['packet_num']:<5} {timestamp:<12} {pkt['src_ip']:<15} {pkt['dst_ip']:<15} "
@@ -222,7 +233,7 @@ class SimpleDPIEngine:
                 
                 for pkt in packets:
                     timestamp = datetime.fromtimestamp(pkt['timestamp']).strftime('%H:%M:%S')
-                    domain_info = pkt['sni'] or pkt['http_host'] or pkt['dns_query'] or '-'
+                    domain_info = pkt['domain']
                     blocked_str = "YES" if pkt['blocked'] else "NO"
                     
                     f.write(f"{pkt['packet_num']:<5} {timestamp:<12} {pkt['src_ip']:<15} {pkt['dst_ip']:<15} "

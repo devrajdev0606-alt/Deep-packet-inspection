@@ -17,10 +17,12 @@ class RuleManager:
         self.domain_patterns: List[str] = []
         self.blocked_apps: Set[AppType] = set()
         
+        
         # Thread synchronization
         self.ip_lock = threading.RLock()
         self.domain_lock = threading.RLock()
         self.app_lock = threading.RLock()
+        self.load_rules()
     
     def block_ip(self, ip: str) -> None:
         """Block an IP address"""
@@ -121,6 +123,21 @@ class RuleManager:
             return True
         
         return False
+    
+    def load_rules(self):
+        """Load blocked domains from blocked_domains.txt"""
+        try:
+            with open("blocked_domains.txt", "r") as f:
+                for line in f:
+                    domain = line.strip().lower()
+
+                    if not domain or domain.startswith("#"):
+                        continue
+
+                    self.block_domain(domain)
+
+        except FileNotFoundError:
+            print("[RuleManager] blocked_domains.txt not found.")
     
     @staticmethod
     def _parse_ip(ip_str: str) -> int:

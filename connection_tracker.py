@@ -35,8 +35,9 @@ class ConnectionTracker:
                     bytes_count: int = 0) -> Connection:
         """Track or update a connection"""
         with self.lock:
-            if tuple in self.connections:
-                conn = self.connections[tuple]
+            key = tuple.normalized()
+            if key in self.connections:
+                conn = self.connections[key]
                 conn.packets_count += 1
                 conn.bytes_count += bytes_count
                 conn.last_seen = time.time()
@@ -51,7 +52,7 @@ class ConnectionTracker:
                     first_seen=time.time(),
                     last_seen=time.time()
                 )
-                self.connections[tuple] = conn
+                self.connections[key] = conn
                 self.total_seen += 1
             
             # Update classification
@@ -71,20 +72,22 @@ class ConnectionTracker:
     def mark_blocked(self, tuple: FiveTuple) -> None:
         """Mark connection as blocked"""
         with self.lock:
-            if tuple in self.connections:
-                self.connections[tuple].blocked = True
+            key = tuple.normalized()
+            if key in self.connections:
+                self.connections[key].blocked = True
                 self.blocked_count += 1
     
     def get_connection(self, tuple: FiveTuple) -> Optional[Connection]:
         """Get connection by tuple"""
         with self.lock:
-            return self.connections.get(tuple)
+            return self.connections.get(tuple.normalized())
     
     def close_connection(self, tuple: FiveTuple) -> None:
         """Mark connection as closed"""
         with self.lock:
-            if tuple in self.connections:
-                self.connections[tuple].state = ConnectionState.CLOSED
+            key=tuple.normalized()
+            if key in self.connections:
+                self.connections[key].state = ConnectionState.CLOSED
     
     def cleanup_stale(self) -> int:
         """Remove stale connections"""
