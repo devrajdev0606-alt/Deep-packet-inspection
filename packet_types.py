@@ -150,13 +150,13 @@ class AppTypeClassifier:
         
         domain_lower = domain.lower()
         
-        # Google (including YouTube, which is owned by Google)
-        if any(keyword in domain_lower for keyword in ['google', 'gstatic', 'googleapis', 'ggpht', 'gvt1']):
-            return AppType.GOOGLE
-        
-        # YouTube
+        #  Youtube
         if any(keyword in domain_lower for keyword in ['youtube', 'ytimg', 'youtu.be', 'yt3.ggpht']):
             return AppType.YOUTUBE
+        
+        #Google
+        if any(keyword in domain_lower for keyword in ['google', 'gstatic', 'googleapis', 'ggpht', 'gvt1']):
+            return AppType.GOOGLE
         
         # Facebook/Meta
         if any(keyword in domain_lower for keyword in ['facebook', 'fbcdn', 'fb.com', 'fbsbx', 'meta.com']):
@@ -171,7 +171,14 @@ class AppTypeClassifier:
             return AppType.WHATSAPP
         
         # Twitter/X
-        if any(keyword in domain_lower for keyword in ['twitter', 'twimg', 'x.com', 't.co']):
+        if (
+        domain_lower == "x.com" or
+        domain_lower.endswith(".x.com") or
+        "twitter.com" in domain_lower or
+        "twimg.com" in domain_lower or
+        domain_lower.endswith(".t.co") or
+        domain_lower == "t.co"
+        ):
             return AppType.TWITTER
         
         # Netflix

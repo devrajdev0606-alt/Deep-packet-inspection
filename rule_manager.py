@@ -86,6 +86,11 @@ class RuleManager:
             if domain_lower in self.blocked_domains:
                 return True
             
+            # Match subdomains
+            for blocked in self.blocked_domains:
+                if domain_lower.endswith("." + blocked):
+                    return True
+            
             # Check wildcard patterns
             for pattern in self.domain_patterns:
                 if self._match_pattern(domain_lower, pattern):

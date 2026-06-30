@@ -209,7 +209,7 @@ class SimpleDPIEngine:
             for app, count in sorted(app_dist.items(), key=lambda x: x[1], reverse=True):
                 print(f"  {app}: {count} connections")
         
-        # Top domains
+        # Top domai
         domains = {}
         for conn in connections:
             domain = conn.sni or conn.http_host or conn.dns_query

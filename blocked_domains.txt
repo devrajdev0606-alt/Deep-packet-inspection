@@ -1,5 +1,6 @@
-youtube.com
 google.com
-facebook.com
-instagram.com
-tsst.360totalsecurity.com
+googleapis.com
+gstatic.com
+googlevideo.com
+youtube.com
+ytimg.com
